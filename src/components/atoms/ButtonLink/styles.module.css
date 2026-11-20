@@ -1,0 +1,5 @@
+@reference "../../../../app/globals.css";
+
+.link {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold no-underline transition-colors;
+}

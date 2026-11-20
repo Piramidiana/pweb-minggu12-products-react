@@ -1,93 +1,139 @@
 import { useState } from "react"
+import type { Product, ProductValues } from "../../../types/product"
+import useProducts from "../../../context/useProducts"
 import Button from "../../atoms/Button"
-import ProductModel from "../../../data/product/model/product-model.ts"
-import ProductRemote from "../../../data/product/source/product-remote.ts"
-import ProductRepository from "../../../data/product/repository/product-repository.ts"
 import ProductGrid from "../../organisms/ProductGrid"
+import ProductFormModal from "../../organisms/ProductFormModal"
+import ConfirmDeleteModal from "../../organisms/ConfirmDeleteModal"
 import styles from "./styles.module.css"
 
-const exampleProducts = [
-    ProductModel.fromResponse({ id: 1, name: "Pulpen", price: 5000 }).toJSON(),
-]
-const repository = ProductRepository(
-    ProductRemote({ baseUrl: import.meta.env.VITE_API_BASE_URL ?? "" }),
-)
+type FormTarget = { mode: "create" } | { mode: "edit"; product: Product }
 
 export default function ProductsPage() {
-    const [products, setProducts] = useState(exampleProducts)
-    const [isLoading, setIsLoading] = useState(false)
-    const [error, setError] = useState("")
-    const [message, setMessage] = useState("")
-    const [selectedProductId, setSelectedProductId] = useState<number | null>(
-        null,
-    )
-    const selectedProduct = products.find(
-        (product) => product.id === selectedProductId,
-    )
+    const {
+        products,
+        status,
+        error,
+        displayMode,
+        reload,
+        addProduct,
+        editProduct,
+        removeProduct,
+    } = useProducts()
+    const [query, setQuery] = useState("")
+    const [formTarget, setFormTarget] = useState<FormTarget | null>(null)
+    const [deleteTarget, setDeleteTarget] = useState<Product | null>(null)
+    const [notice, setNotice] = useState("")
 
-    async function handleLoadProducts() {
-        setIsLoading(true)
-        setError("")
-        setMessage("Memuat produk…")
-        try {
-            const models = await repository.getProductList()
-            setProducts(models.map((model) => model.toJSON()))
-            setSelectedProductId(null)
-            setMessage(`${models.length} produk berhasil dimuat dari API.`)
-        } catch (error) {
-            setError(
-                error instanceof Error ? error.message : "Gagal memuat produk.",
-            )
-            setMessage("")
-        } finally {
-            setIsLoading(false)
+    const keyword = query.trim().toLowerCase()
+    const visibleProducts = keyword
+        ? products.filter((product) =>
+              product.name.toLowerCase().includes(keyword),
+          )
+        : products
+
+    async function handleSubmit(values: ProductValues) {
+        if (formTarget?.mode === "edit") {
+            await editProduct(formTarget.product.id, values)
+            setNotice(`Produk "${values.name}" berhasil diperbarui.`)
+        } else {
+            await addProduct(values)
+            setNotice(`Produk "${values.name}" berhasil ditambahkan.`)
         }
     }
 
-    function handleSelectProduct(id: number) {
-        setSelectedProductId(id)
-        setMessage("")
+    async function handleDelete() {
+        if (!deleteTarget) return
+        await removeProduct(deleteTarget.id)
+        setNotice(`Produk "${deleteTarget.name}" berhasil dihapus.`)
     }
 
     return (
-        <>
-            <header className={styles.header}>
-                <p className={styles.eyebrow}>Starter pembelajaran React</p>
-                <h1 className={styles.title}>Manajemen Produk</h1>
-                <p className={styles.description}>
-                    Satu contoh komponen untuk setiap tingkat Atomic Design.
-                    Kembangkan fitur berikutnya sesuai PRD.
-                </p>
-            </header>
-            <div className={styles.toolbar}>
-                <Button onClick={handleLoadProducts} disabled={isLoading}>
-                    {isLoading ? "Memuat…" : "Muat dari API"}
+        <section className={styles.page}>
+            <div className={styles.header}>
+                <h1 className={styles.title}>Daftar Produk</h1>
+                <Button onClick={() => setFormTarget({ mode: "create" })}>
+                    Tambah produk
                 </Button>
-                <p className={styles.hint}>
-                    Opsional: gunakan backend Anda sendiri. Saat halaman dibuka,
-                    tidak ada request API.
-                </p>
             </div>
-            {error && (
-                <p role="alert" className={styles.error}>
-                    {error}
+
+            <input
+                type="search"
+                className={styles.search}
+                placeholder="Cari nama produk"
+                aria-label="Cari nama produk"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+            />
+
+            {notice && (
+                <p role="status" className={styles.notice}>
+                    {notice}
                 </p>
             )}
-            <section aria-label="Contoh daftar produk" aria-busy={isLoading}>
-                {products.length === 0 && (
-                    <p className={styles.notice}>Belum ada produk dari API.</p>
+
+            {status === "loading" && (
+                <p className={styles.message}>Memuat produk…</p>
+            )}
+
+            {status === "error" && (
+                <div role="alert" className={styles.message}>
+                    <p>{error}</p>
+                    <Button variant="secondary" onClick={reload}>
+                        Coba lagi
+                    </Button>
+                </div>
+            )}
+
+            {status === "ready" && products.length === 0 && (
+                <p className={styles.message}>
+                    Belum ada produk. Tambahkan produk pertama.
+                </p>
+            )}
+
+            {status === "ready" &&
+                products.length > 0 &&
+                visibleProducts.length === 0 && (
+                    <p className={styles.message}>
+                        Tidak ada produk yang cocok dengan "{query.trim()}".
+                    </p>
                 )}
+
+            {status === "ready" && visibleProducts.length > 0 && (
                 <ProductGrid
-                    products={products}
-                    onSelect={handleSelectProduct}
+                    products={visibleProducts}
+                    layout={displayMode}
+                    onEdit={(product) =>
+                        setFormTarget({ mode: "edit", product })
+                    }
+                    onDelete={setDeleteTarget}
                 />
-            </section>
-            <p role="status" className={styles.notice}>
-                {message ||
-                    (selectedProduct
-                        ? `Produk dipilih: ${selectedProduct.name}.`
-                        : "Klik Pilih produk untuk mempelajari callback dari kartu ke halaman.")}
-            </p>
-        </>
+            )}
+
+            {formTarget && (
+                <ProductFormModal
+                    key={
+                        formTarget.mode === "edit"
+                            ? formTarget.product.id
+                            : "create"
+                    }
+                    product={
+                        formTarget.mode === "edit"
+                            ? formTarget.product
+                            : undefined
+                    }
+                    onSubmit={handleSubmit}
+                    onClose={() => setFormTarget(null)}
+                />
+            )}
+
+            {deleteTarget && (
+                <ConfirmDeleteModal
+                    product={deleteTarget}
+                    onConfirm={handleDelete}
+                    onClose={() => setDeleteTarget(null)}
+                />
+            )}
+        </section>
     )
 }
