@@ -1,5 +1,5 @@
-import RootPage from "../src/components/pages/RootPage"
+import DashboardPage from "../src/components/pages/DashboardPage"
 
 export default function Page() {
-    return <RootPage />
+    return <DashboardPage />
 }
