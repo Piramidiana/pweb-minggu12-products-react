@@ -1,0 +1,17 @@
+@reference "../../../../app/globals.css";
+
+.text {
+    @apply text-sm leading-6 text-slate-600;
+}
+
+.name {
+    @apply font-semibold wrap-break-word text-slate-900;
+}
+
+.error {
+    @apply mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700;
+}
+
+.actions {
+    @apply mt-6 flex justify-end gap-3;
+}
