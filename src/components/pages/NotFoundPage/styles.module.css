@@ -1,0 +1,25 @@
+@reference "../../../../app/globals.css";
+
+.page {
+    @apply flex flex-col items-start gap-3 rounded-xl border border-slate-200 bg-white p-6;
+}
+
+.code {
+    @apply text-sm font-semibold tracking-widest text-slate-500;
+}
+
+.title {
+    @apply text-2xl font-bold text-slate-900;
+}
+
+.text {
+    @apply text-sm text-slate-600;
+}
+
+.path {
+    @apply rounded bg-slate-100 px-1.5 py-0.5 break-all text-slate-800;
+}
+
+.actions {
+    @apply flex flex-wrap gap-2;
+}
