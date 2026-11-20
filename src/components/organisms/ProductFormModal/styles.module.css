@@ -1,0 +1,13 @@
+@reference "../../../../app/globals.css";
+
+.form {
+    @apply flex flex-col gap-4;
+}
+
+.error {
+    @apply rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700;
+}
+
+.actions {
+    @apply mt-2 flex justify-end gap-3;
+}
