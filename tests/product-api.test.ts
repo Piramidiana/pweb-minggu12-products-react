@@ -2,10 +2,29 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import ProductModel from "../src/data/product/model/product-model.ts"
 import ProductListParam from "../src/data/product/param/product-list-param.ts"
-import ProductRemote from "../src/data/product/source/product-remote.ts"
+import ProductRemote, {
+    ProductApiError,
+    type ProductRemoteSource,
+} from "../src/data/product/source/product-remote.ts"
 import ProductRepository from "../src/data/product/repository/product-repository.ts"
 
 const sample = { id: 1, name: " Pulpen ", price: 5000 }
+
+function createSource(
+    overrides: Partial<ProductRemoteSource>,
+): ProductRemoteSource {
+    const unused = async (): Promise<never> => {
+        throw new Error("Method ini tidak dipakai pada tes ini.")
+    }
+    return {
+        getProductListRemote: unused,
+        getProductRemote: unused,
+        createProductRemote: unused,
+        updateProductRemote: unused,
+        deleteProductRemote: unused,
+        ...overrides,
+    }
+}
 
 test("model memetakan response ke produk UI tanpa field tambahan", () => {
     const model = ProductModel.fromResponse({ ...sample, extra: "ignored" })
@@ -93,12 +112,74 @@ test("source menolak HTTP error dan JSON yang tidak valid", async () => {
 })
 
 test("repository menerima array kosong dan menolak wrapper/ID duplikat", async () => {
-    const empty = ProductRepository({ getProductListRemote: async () => [] })
+    const empty = ProductRepository(
+        createSource({ getProductListRemote: async () => [] }),
+    )
     assert.deepEqual(await empty.getProductList(), [])
     for (const response of [{ data: [sample] }, [sample, sample]]) {
-        const repository = ProductRepository({
-            getProductListRemote: async () => response,
-        })
+        const repository = ProductRepository(
+            createSource({ getProductListRemote: async () => response }),
+        )
         await assert.rejects(repository.getProductList(), TypeError)
     }
+})
+
+test("create dan update mengirim body JSON sesuai kontrak backend", async () => {
+    const calls: { method?: string; url: string; body: unknown }[] = []
+    const source = ProductRemote({
+        baseUrl: "https://api.example.test",
+        fetchImpl: async (url, init) => {
+            calls.push({
+                method: init?.method,
+                url: String(url),
+                body: JSON.parse(String(init?.body)),
+            })
+            return Response.json(sample, { status: 201 })
+        },
+    })
+    const repository = ProductRepository(source)
+    await repository.createProduct({ name: "Pulpen", price: 5000 })
+    await repository.updateProduct(1, { name: "Pulpen", price: 5000 })
+    assert.deepEqual(calls, [
+        {
+            method: "POST",
+            url: "https://api.example.test/products",
+            body: { name: "Pulpen", price: 5000 },
+        },
+        {
+            method: "PUT",
+            url: "https://api.example.test/products",
+            body: { id: 1, name: "Pulpen", price: 5000 },
+        },
+    ])
+})
+
+test("delete memakai id di path dan error membawa status serta pesan backend", async () => {
+    const calls: string[] = []
+    const source = ProductRemote({
+        baseUrl: "https://api.example.test",
+        fetchImpl: async (url, init) => {
+            calls.push(`${init?.method} ${String(url)}`)
+            if (String(url).endsWith("/products/99")) {
+                return Response.json(
+                    { message: "Produk tidak ditemukan" },
+                    { status: 404 },
+                )
+            }
+            return Response.json({ message: "ok", data: sample })
+        },
+    })
+    const repository = ProductRepository(source)
+    await repository.deleteProduct(1)
+    await assert.rejects(
+        repository.getProduct(99),
+        (error: unknown) =>
+            error instanceof ProductApiError &&
+            error.status === 404 &&
+            error.message === "Produk tidak ditemukan",
+    )
+    assert.deepEqual(calls, [
+        "DELETE https://api.example.test/products/1",
+        "GET https://api.example.test/products/99",
+    ])
 })
